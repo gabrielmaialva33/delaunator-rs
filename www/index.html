@@ -141,6 +141,14 @@
         .style-option:nth-child(6) {
             background: radial-gradient(circle, var(--vibrant-red) 0%, var(--neon-blue) 100%);
         }
+        
+        .style-option:nth-child(7) {
+            background: linear-gradient(45deg, #9b5de5, #ff9e00);
+        }
+        
+        .style-option:nth-child(8) {
+            background: linear-gradient(to right, #f15bb5, #00f5d4);
+        }
 
         .cursor {
             position: fixed;
@@ -312,6 +320,8 @@
             <div class="style-option" data-style="liquid"></div>
             <div class="style-option" data-style="vortex"></div>
             <div class="style-option" data-style="distortion"></div>
+            <div class="style-option" data-style="psychedelic"></div>
+            <div class="style-option" data-style="kaleidoscope"></div>
         </div>
 
         <div class="controls">
@@ -329,6 +339,9 @@
     <div class="cursor-ripple" id="cursor-ripple"></div>
     <div class="vortex-container" id="vortex-container"></div>
     <div class="distortion-layer" id="distortion-layer"></div>
+    <div class="fractal-container" id="fractal-container"></div>
+    <div class="kaleidoscope-container" id="kaleidoscope-container"></div>
+    <canvas id="audio-canvas" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:3; opacity:0.6;"></canvas>
     
     <script type="module">
         import initDelaunator from '../pkg/delaunator_rs.js';
@@ -415,13 +428,135 @@
                 hullColor: "#d1ff33",
                 glow: true,
                 pulse: true,
-                particleColor: "#05d9e8"
+                particleColor: "#05d9e8",
+                soundReactive: true
+            },
+            psychedelic: {
+                name: "Psychedelic",
+                backgroundColor: "#0a0a0a",
+                pointColor: "#9b5de5",
+                pointSize: 4,
+                triangleStroke: "#f15bb5",
+                triangleFill: "rgba(255, 158, 0, 0.1)",
+                hullColor: "#00bbf9",
+                glow: true,
+                pulse: true,
+                particleColor: "#f15bb5",
+                soundReactive: true
+            },
+            kaleidoscope: {
+                name: "Kaleidoscope",
+                backgroundColor: "#0a0a0a",
+                pointColor: "#00f5d4",
+                pointSize: 3,
+                triangleStroke: "#ff9e00",
+                triangleFill: "rgba(0, 245, 212, 0.08)",
+                hullColor: "#9b5de5",
+                glow: true,
+                pulse: true,
+                particleColor: "#ff9e00",
+                soundReactive: true
             }
         };
         
         // Current settings
         let currentStyle = "neon";
-        let currentMode = "follow"; // normal, follow, animation, vortex, magnetism
+        let currentMode = "follow"; // normal, follow, animation, vortex, magnetism, fractal, audioVisual, kaleidoscope
+        
+        // Audio visualization variables
+        let audioContext;
+        let audioAnalyser;
+        let audioDataArray;
+        let isAudioInitialized = false;
+        let audioCanvas;
+        let audioCtx;
+        let bassValue = 0;
+        let midValue = 0;
+        let trebleValue = 0;
+        let audioActive = false;
+        
+        // Initialize audio context and analyzer
+        function initAudio() {
+            try {
+                // Create audio context
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Create audio analyzer
+                audioAnalyser = audioContext.createAnalyser();
+                audioAnalyser.fftSize = 256;
+                const bufferLength = audioAnalyser.frequencyBinCount;
+                audioDataArray = new Uint8Array(bufferLength);
+                
+                // Connect to audio source (system audio)
+                navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+                    .then(stream => {
+                        const source = audioContext.createMediaStreamSource(stream);
+                        source.connect(audioAnalyser);
+                        isAudioInitialized = true;
+                        audioActive = true;
+                        console.log("Audio initialized successfully");
+                        
+                        // Setup audio canvas
+                        audioCanvas = document.getElementById('audio-canvas');
+                        audioCtx = audioCanvas.getContext('2d');
+                        
+                        // Set canvas dimensions
+                        const dpr = window.devicePixelRatio || 1;
+                        audioCanvas.width = window.innerWidth * dpr;
+                        audioCanvas.height = window.innerHeight * dpr;
+                        audioCtx.scale(dpr, dpr);
+                    })
+                    .catch(err => {
+                        console.error("Audio initialization error:", err);
+                        alert("Could not access microphone. Some features might not work.");
+                    });
+            } catch (error) {
+                console.error("WebAudio API error:", error);
+            }
+        }
+        
+        // Analyze audio data and update visualization
+        function analyzeAudio() {
+            if (!isAudioInitialized || !audioActive) return;
+            
+            audioAnalyser.getByteFrequencyData(audioDataArray);
+            
+            // Calculate average values for different frequency ranges
+            // Bass: 0-40Hz, Mid: 40-1000Hz, Treble: 1000-20000Hz
+            // With FFT size of 256, we approximate these ranges
+            let bassSum = 0;
+            let midSum = 0;
+            let trebleSum = 0;
+            
+            // Low frequencies (bass)
+            for (let i = 0; i < 4; i++) {
+                bassSum += audioDataArray[i];
+            }
+            
+            // Mid frequencies
+            for (let i = 4; i < 40; i++) {
+                midSum += audioDataArray[i];
+            }
+            
+            // High frequencies (treble)
+            for (let i = 40; i < audioDataArray.length; i++) {
+                trebleSum += audioDataArray[i];
+            }
+            
+            // Normalize to [0-1]
+            bassValue = bassSum / (4 * 255);
+            midValue = midSum / (36 * 255);
+            trebleValue = trebleSum / ((audioDataArray.length - 40) * 255);
+            
+            // Draw audio visualization
+            drawAudioVisualization();
+            
+            return {
+                bass: bassValue,
+                mid: midValue,
+                treble: trebleValue
+            };
+        }
         let animating = false;
         let animationFrameId = null;
         let lastFrameTime = 0;
@@ -865,29 +1000,104 @@
             magneticPoints = [];
         }
         
-        // Animation loop with enhanced effects
+        // Draw audio visualization
+        function drawAudioVisualization() {
+            if (!audioCtx || !isAudioInitialized) return;
+            
+            const width = audioCanvas.width / window.devicePixelRatio;
+            const height = audioCanvas.height / window.devicePixelRatio;
+            
+            // Clear canvas
+            audioCtx.clearRect(0, 0, width, height);
+            
+            if (currentMode !== "audioVisual") return;
+            
+            // Draw frequency bars
+            const barWidth = width / audioDataArray.length;
+            
+            for (let i = 0; i < audioDataArray.length; i++) {
+                const barHeight = (audioDataArray[i] / 255) * height * 0.5;
+                
+                // Calculate color based on frequency
+                const hue = i / audioDataArray.length * 360;
+                const style = STYLES[currentStyle];
+                
+                // Use style colors for visualization
+                let barColor;
+                if (i < 4) {
+                    barColor = style.pointColor;
+                } else if (i < 40) {
+                    barColor = style.triangleStroke;
+                } else {
+                    barColor = style.hullColor;
+                }
+                
+                audioCtx.fillStyle = barColor;
+                audioCtx.fillRect(i * barWidth, height - barHeight, barWidth - 1, barHeight);
+                
+                // Mirror to top
+                audioCtx.fillRect(i * barWidth, 0, barWidth - 1, barHeight);
+            }
+            
+            // Draw circular visualizer
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const maxRadius = Math.min(width, height) * 0.3;
+            
+            audioCtx.beginPath();
+            audioCtx.arc(centerX, centerY, bassValue * maxRadius, 0, Math.PI * 2);
+            audioCtx.strokeStyle = STYLES[currentStyle].pointColor + "80";
+            audioCtx.lineWidth = 10;
+            audioCtx.stroke();
+            
+            audioCtx.beginPath();
+            audioCtx.arc(centerX, centerY, midValue * maxRadius, 0, Math.PI * 2);
+            audioCtx.strokeStyle = STYLES[currentStyle].triangleStroke + "80";
+            audioCtx.lineWidth = 6;
+            audioCtx.stroke();
+            
+            audioCtx.beginPath();
+            audioCtx.arc(centerX, centerY, trebleValue * maxRadius, 0, Math.PI * 2);
+            audioCtx.strokeStyle = STYLES[currentStyle].hullColor + "80";
+            audioCtx.lineWidth = 3;
+            audioCtx.stroke();
+        }
+        
+        // Animation loop with enhanced effects and audio responsiveness
         function animationLoop(timestamp = 0) {
             const deltaTime = timestamp - lastFrameTime;
             lastFrameTime = timestamp;
             animationTime = timestamp * 0.001; // seconds
             particleTime += deltaTime;
             
+            // Analyze audio if initialized
+            let audioData = { bass: 0, mid: 0, treble: 0 };
+            if (isAudioInitialized && audioActive) {
+                audioData = analyzeAudio();
+            }
+            
             // Handle current mode
             if (currentMode === "follow" && mousePosition.x > 0) {
-                handleFollowMode();
+                handleFollowMode(audioData);
             } else if (currentMode === "animation") {
-                handleAnimationMode(timestamp);
+                handleAnimationMode(timestamp, audioData);
             } else if (currentMode === "vortex") {
-                handleVortexMode(timestamp);
+                handleVortexMode(timestamp, audioData);
             } else if (currentMode === "magnetism") {
-                handleMagnetismMode(timestamp);
+                handleMagnetismMode(timestamp, audioData);
+            } else if (currentMode === "fractal") {
+                handleFractalMode(timestamp, audioData);
+            } else if (currentMode === "audioVisual") {
+                handleAudioVisualMode(timestamp, audioData);
+            } else if (currentMode === "kaleidoscope") {
+                handleKaleidoscopeMode(timestamp, audioData);
             }
             
             // Update any particles
             updateParticles();
             
             // Draw the current state
-            draw();
+            draw(audioData);
             
             // Continue animation
             animationFrameId = requestAnimationFrame(animationLoop);
