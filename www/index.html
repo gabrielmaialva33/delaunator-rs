@@ -1,0 +1,1463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delaunator Visualization</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-red: #e63946;
+            --vibrant-red: #d62828;
+            --dark-red: #9d0208;
+            --primary-green: #2a9d8f;
+            --vibrant-green: #06d6a0;
+            --dark-green: #386641;
+            --bright-yellow: #ffba08;
+            --neon-pink: #ff2a6d;
+            --neon-blue: #05d9e8;
+            --acid-green: #d1ff33;
+            --background: #0a0a0a;
+            --text: #f5f5f5;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--background);
+            color: var(--text);
+            font-family: 'Space Grotesk', sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            cursor: none;
+        }
+
+        .container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .controls {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .container:hover .controls {
+            opacity: 1;
+        }
+
+        .control-button {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(10, 10, 10, 0.7);
+            border: 1px solid var(--primary-red);
+            color: var(--text);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(5px);
+            transition: all 0.3s ease;
+            box-shadow: 0 0 10px rgba(230, 57, 70, 0.3);
+        }
+
+        .control-button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 15px rgba(230, 57, 70, 0.6);
+        }
+
+        .style-selector {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 100;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .container:hover .style-selector {
+            opacity: 1;
+        }
+
+        .style-option {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+        }
+
+        .style-option.active {
+            transform: scale(1.2);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+        }
+
+        .style-option:nth-child(1) {
+            background: linear-gradient(to right, var(--primary-red), var(--primary-green));
+        }
+
+        .style-option:nth-child(2) {
+            background: linear-gradient(45deg, var(--dark-red), var(--vibrant-green));
+        }
+
+        .style-option:nth-child(3) {
+            background: linear-gradient(135deg, var(--vibrant-red), var(--dark-green));
+        }
+
+        .style-option:nth-child(4) {
+            background: linear-gradient(to bottom, var(--bright-yellow), var(--dark-red));
+        }
+        
+        .style-option:nth-child(5) {
+            background: linear-gradient(to right, var(--neon-pink), var(--acid-green));
+        }
+        
+        .style-option:nth-child(6) {
+            background: radial-gradient(circle, var(--vibrant-red) 0%, var(--neon-blue) 100%);
+        }
+
+        .cursor {
+            position: fixed;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: var(--primary-red);
+            transform: translate(-50%, -50%);
+            mix-blend-mode: difference;
+            pointer-events: none;
+            z-index: 999;
+            opacity: 0.8;
+            transition: width 0.3s, height 0.3s, background-color 0.3s;
+        }
+
+        .cursor-trail {
+            position: fixed;
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background-color: var(--primary-green);
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 998;
+            opacity: 0.5;
+        }
+        
+        .cursor-ripple {
+            position: fixed;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 2px solid var(--primary-red);
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 997;
+            opacity: 0;
+        }
+
+        @keyframes ripple {
+            0% { width: 0; height: 0; opacity: 0.5; }
+            100% { width: 100px; height: 100px; opacity: 0; }
+        }
+        
+        .magnetic-point {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--vibrant-red);
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 990;
+            box-shadow: 0 0 10px var(--vibrant-red);
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.7; }
+            50% { transform: scale(1.2); opacity: 0.9; }
+            100% { transform: scale(1); opacity: 0.7; }
+        }
+        
+        @keyframes float {
+            0% { transform: translateY(0) rotate(0); }
+            50% { transform: translateY(-20px) rotate(5deg); }
+            100% { transform: translateY(0) rotate(0); }
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .vortex-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+        
+        .distortion-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 4;
+            mix-blend-mode: overlay;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .style-hint {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.5);
+            pointer-events: none;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .container:hover .style-hint {
+            opacity: 0.5;
+        }
+
+        .style-name {
+            color: var(--primary-red);
+            font-weight: 500;
+        }
+
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--background);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 1;
+            transition: opacity 1s ease;
+        }
+
+        .loading.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loader {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 3px solid transparent;
+            border-top-color: var(--primary-red);
+            border-bottom-color: var(--primary-green);
+            animation: spin 1.5s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="loading" id="loading">
+        <div class="loader"></div>
+    </div>
+
+    <div class="container">
+        <canvas id="canvas"></canvas>
+
+        <div class="style-selector">
+            <div class="style-option active" data-style="neon"></div>
+            <div class="style-option" data-style="organic"></div>
+            <div class="style-option" data-style="glitch"></div>
+            <div class="style-option" data-style="liquid"></div>
+            <div class="style-option" data-style="vortex"></div>
+            <div class="style-option" data-style="distortion"></div>
+        </div>
+
+        <div class="controls">
+            <button class="control-button" id="clear">×</button>
+            <button class="control-button" id="random">+</button>
+            <button class="control-button" id="mode">●</button>
+        </div>
+
+        <div class="style-hint">
+            <span class="style-name" id="style-name">Neon</span>
+        </div>
+    </div>
+
+    <div class="cursor" id="cursor"></div>
+    <div class="cursor-ripple" id="cursor-ripple"></div>
+    <div class="vortex-container" id="vortex-container"></div>
+    <div class="distortion-layer" id="distortion-layer"></div>
+    
+    <script type="module">
+        import initDelaunator from '../pkg/delaunator_rs.js';
+        
+        // Initialize
+        let Delaunator;
+        let delaunay = null;
+        const points = [];
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const cursor = document.getElementById('cursor');
+        const styleName = document.getElementById('style-name');
+        const loading = document.getElementById('loading');
+        
+        // Visual styles
+        const STYLES = {
+            neon: {
+                name: "Neon",
+                backgroundColor: "#0a0a0a",
+                pointColor: "#e63946",
+                pointSize: 3,
+                triangleStroke: "#06d6a0",
+                triangleFill: "rgba(6, 214, 160, 0.1)",
+                hullColor: "#2a9d8f",
+                glow: true,
+                pulse: true,
+                particleColor: "#06d6a0"
+            },
+            organic: {
+                name: "Organic",
+                backgroundColor: "#0a0a0a",
+                pointColor: "#d62828",
+                pointSize: 4,
+                triangleStroke: "#386641",
+                triangleFill: "rgba(56, 102, 65, 0.07)",
+                hullColor: "#9d0208",
+                glow: false,
+                pulse: false,
+                particleColor: "#d62828"
+            },
+            glitch: {
+                name: "Glitch",
+                backgroundColor: "#0a0a0a",
+                pointColor: "#ffba08",
+                pointSize: 2,
+                triangleStroke: "#e63946",
+                triangleFill: "rgba(42, 157, 143, 0.05)",
+                hullColor: "#d62828",
+                glow: true,
+                pulse: true,
+                particleColor: "#e63946"
+            },
+            liquid: {
+                name: "Liquid",
+                backgroundColor: "#0a0a0a",
+                pointColor: "#2a9d8f",
+                pointSize: 5,
+                triangleStroke: "#ffba08",
+                triangleFill: "rgba(230, 57, 70, 0.08)",
+                hullColor: "#9d0208",
+                glow: true,
+                pulse: false,
+                particleColor: "#ffba08"
+            },
+            vortex: {
+                name: "Vortex",
+                backgroundColor: "#0a0a0a",
+                pointColor: "#ff2a6d",
+                pointSize: 4,
+                triangleStroke: "#d1ff33",
+                triangleFill: "rgba(255, 42, 109, 0.08)",
+                hullColor: "#05d9e8",
+                glow: true,
+                pulse: true,
+                particleColor: "#ff2a6d"
+            },
+            distortion: {
+                name: "Distortion",
+                backgroundColor: "#0a0a0a",
+                pointColor: "#d62828",
+                pointSize: 3,
+                triangleStroke: "#05d9e8",
+                triangleFill: "rgba(5, 217, 232, 0.06)",
+                hullColor: "#d1ff33",
+                glow: true,
+                pulse: true,
+                particleColor: "#05d9e8"
+            }
+        };
+        
+        // Current settings
+        let currentStyle = "neon";
+        let currentMode = "follow"; // normal, follow, animation, vortex, magnetism
+        let animating = false;
+        let animationFrameId = null;
+        let lastFrameTime = 0;
+        let mousePosition = { x: -100, y: -100 };
+        let lastMousePosition = { x: -100, y: -100 };
+        let mouseSpeed = 0;
+        let mousePointIndex = -1;
+        let cursorTrails = [];
+        let animationTime = 0;
+        let particleTime = 0;
+        let particles = [];
+        let ripples = [];
+        let magneticPoints = [];
+        let isMouseDown = false;
+        let mouseDragStart = null;
+        let zoom = 1;
+        let pan = { x: 0, y: 0 };
+        let attractionRadius = 200;
+        let repulsionRadius = 100;
+        
+        // Custom cursor and mouse interactions
+        document.addEventListener('mousemove', (e) => {
+            // Calculate mouse speed
+            const dx = e.clientX - lastMousePosition.x;
+            const dy = e.clientY - lastMousePosition.y;
+            mouseSpeed = Math.sqrt(dx*dx + dy*dy);
+            
+            lastMousePosition = {
+                x: mousePosition.x,
+                y: mousePosition.y
+            };
+            
+            mousePosition = {
+                x: e.clientX,
+                y: e.clientY
+            };
+            
+            cursor.style.left = e.clientX + 'px';
+            cursor.style.top = e.clientY + 'px';
+            
+            // Scale cursor based on mouse speed
+            const speedFactor = Math.min(mouseSpeed / 10, 2);
+            cursor.style.width = (20 + speedFactor * 10) + 'px';
+            cursor.style.height = (20 + speedFactor * 10) + 'px';
+            
+            // Add cursor trail based on mouse speed
+            if (mouseSpeed > 3 || Math.random() > 0.7) {
+                const trail = document.createElement('div');
+                trail.classList.add('cursor-trail');
+                trail.style.left = e.clientX + 'px';
+                trail.style.top = e.clientY + 'px';
+                
+                // Trail size based on speed
+                const size = 3 + speedFactor * 2;
+                trail.style.width = size + 'px';
+                trail.style.height = size + 'px';
+                
+                // Adjust color based on current style
+                trail.style.backgroundColor = STYLES[currentStyle].particleColor;
+                
+                document.body.appendChild(trail);
+                
+                setTimeout(() => {
+                    trail.style.opacity = '0';
+                    setTimeout(() => {
+                        if (document.body.contains(trail)) {
+                            document.body.removeChild(trail);
+                        }
+                    }, 500);
+                }, 100);
+            }
+            
+            // Handle magnetic points in magnetism mode
+            if (currentMode === "magnetism") {
+                updateMagneticPoints();
+            }
+            
+            // Create ripple effect on fast mouse movements
+            if (mouseSpeed > 20 && Math.random() > 0.7) {
+                createRippleEffect(e.clientX, e.clientY);
+            }
+        });
+        
+        // Handle cursor styles and mouse interactions
+        document.addEventListener('mousedown', (e) => {
+            isMouseDown = true;
+            mouseDragStart = {
+                x: e.clientX,
+                y: e.clientY
+            };
+            
+            cursor.style.width = '30px';
+            cursor.style.height = '30px';
+            cursor.style.backgroundColor = STYLES[currentStyle].pointColor;
+            
+            // Create ripple effect
+            createRippleEffect(e.clientX, e.clientY);
+            
+            // Create particles explosion
+            createParticleExplosion(e.clientX, e.clientY, 10);
+        });
+        
+        document.addEventListener('mouseup', () => {
+            isMouseDown = false;
+            mouseDragStart = null;
+            
+            cursor.style.width = '20px';
+            cursor.style.height = '20px';
+            cursor.style.backgroundColor = STYLES[currentStyle].pointColor;
+        });
+        
+        // Handle mouse wheel for zoom
+        document.addEventListener('wheel', (e) => {
+            if (currentMode === "vortex") {
+                // Change zoom level
+                const delta = e.deltaY > 0 ? -0.05 : 0.05;
+                zoom = Math.max(0.5, Math.min(2, zoom + delta));
+                
+                // Create ripple when zooming
+                createRippleEffect(mousePosition.x, mousePosition.y);
+            }
+        });
+        
+        // Create ripple effect
+        function createRippleEffect(x, y) {
+            const ripple = document.getElementById('cursor-ripple');
+            ripple.style.left = x + 'px';
+            ripple.style.top = y + 'px';
+            ripple.style.borderColor = STYLES[currentStyle].pointColor;
+            ripple.style.animation = 'none';
+            
+            // Trigger reflow
+            void ripple.offsetWidth;
+            
+            ripple.style.animation = 'ripple 0.8s ease-out forwards';
+        }
+        
+        // Create and update magnetic points
+        function createMagneticPoints(count) {
+            // Clear existing magnetic points
+            magneticPoints = [];
+            
+            for (let i = 0; i < count; i++) {
+                const point = {
+                    x: Math.random() * window.innerWidth,
+                    y: Math.random() * window.innerHeight,
+                    vx: (Math.random() - 0.5) * 2,
+                    vy: (Math.random() - 0.5) * 2,
+                    size: 4 + Math.random() * 4
+                };
+                
+                magneticPoints.push(point);
+                
+                // Create visual element
+                const pointElement = document.createElement('div');
+                pointElement.classList.add('magnetic-point');
+                pointElement.style.left = point.x + 'px';
+                pointElement.style.top = point.y + 'px';
+                pointElement.style.width = point.size + 'px';
+                pointElement.style.height = point.size + 'px';
+                document.body.appendChild(pointElement);
+                
+                // Store reference to element
+                point.element = pointElement;
+            }
+        }
+        
+        function updateMagneticPoints() {
+            for (const point of magneticPoints) {
+                // Calculate distance to mouse
+                const dx = mousePosition.x - point.x;
+                const dy = mousePosition.y - point.y;
+                const distance = Math.sqrt(dx*dx + dy*dy);
+                
+                // Attraction/repulsion based on distance
+                if (distance < attractionRadius) {
+                    const force = (distance < repulsionRadius) ? -0.2 : 0.1;
+                    const angle = Math.atan2(dy, dx);
+                    point.vx += Math.cos(angle) * force;
+                    point.vy += Math.sin(angle) * force;
+                }
+                
+                // Apply velocity with damping
+                point.vx *= 0.95;
+                point.vy *= 0.95;
+                point.x += point.vx;
+                point.y += point.vy;
+                
+                // Bounce off edges
+                if (point.x < 0 || point.x > window.innerWidth) point.vx *= -1;
+                if (point.y < 0 || point.y > window.innerHeight) point.vy *= -1;
+                
+                // Update element position
+                point.element.style.left = point.x + 'px';
+                point.element.style.top = point.y + 'px';
+                
+                // Create particle trail
+                if (Math.random() > 0.9) {
+                    const particle = {
+                        x: point.x,
+                        y: point.y,
+                        size: point.size * 0.5,
+                        life: 20,
+                        maxLife: 20,
+                        color: STYLES[currentStyle].particleColor
+                    };
+                    particles.push(particle);
+                }
+            }
+        }
+        
+        // Make canvas responsive
+        function setCanvasSize() {
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = window.innerWidth * dpr;
+            canvas.height = window.innerHeight * dpr;
+            ctx.scale(dpr, dpr);
+        }
+        
+        window.addEventListener('resize', () => {
+            setCanvasSize();
+            draw();
+        });
+        
+        // Initialize the WebAssembly module
+        async function init() {
+            try {
+                const module = await initDelaunator();
+                Delaunator = module.Delaunator;
+                console.log('Delaunator WASM module loaded');
+                
+                // Hide loading screen
+                setTimeout(() => {
+                    loading.classList.add('hidden');
+                }, 1000);
+                
+                // Add initial points in a pattern
+                addInitialPoints();
+                
+                // Start animation loop
+                animationLoop();
+            } catch (error) {
+                console.error('Failed to initialize Delaunator:', error);
+            }
+        }
+        
+        // Add initial points in an interesting pattern
+        function addInitialPoints() {
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+            const radius = Math.min(centerX, centerY) * 0.5;
+            
+            // Add center point
+            points.push([centerX, centerY]);
+            
+            // Add points in spiral pattern
+            const numPoints = 24;
+            const spirals = 3;
+            
+            for (let i = 0; i < numPoints; i++) {
+                const angle = (i / numPoints) * Math.PI * 2 * spirals;
+                const distance = (i / numPoints) * radius;
+                const x = centerX + Math.cos(angle) * distance;
+                const y = centerY + Math.sin(angle) * distance;
+                points.push([x, y]);
+            }
+            
+            // Add some random points
+            for (let i = 0; i < 10; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const distance = Math.random() * radius;
+                const x = centerX + Math.cos(angle) * distance;
+                const y = centerY + Math.sin(angle) * distance;
+                points.push([x, y]);
+            }
+            
+            updateTriangulation();
+        }
+        
+        // Add random points
+        function addRandomPoints(count = 50) {
+            for (let i = 0; i < count; i++) {
+                points.push([
+                    Math.random() * window.innerWidth,
+                    Math.random() * window.innerHeight
+                ]);
+            }
+            
+            // Create particles at each new point
+            for (let i = points.length - count; i < points.length; i++) {
+                createParticleExplosion(points[i][0], points[i][1], 5);
+            }
+            
+            updateTriangulation();
+        }
+        
+        // Clear points
+        function clearPoints() {
+            points.length = 0;
+            mousePointIndex = -1;
+            delaunay = null;
+            
+            // Add explosive particles
+            for (let i = 0; i < 20; i++) {
+                createParticleExplosion(
+                    Math.random() * window.innerWidth,
+                    Math.random() * window.innerHeight,
+                    15
+                );
+            }
+            
+            draw();
+        }
+        
+        // Create particle explosion
+        function createParticleExplosion(x, y, count) {
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 1 + Math.random() * 3;
+                const size = 1 + Math.random() * 3;
+                const life = 30 + Math.random() * 20;
+                
+                particles.push({
+                    x,
+                    y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    size,
+                    life,
+                    maxLife: life,
+                    color: STYLES[currentStyle].pointColor
+                });
+            }
+        }
+        
+        // Update particles
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+        }
+        
+        // Draw particles
+        function drawParticles() {
+            for (let i = 0; i < particles.length; i++) {
+                const p = particles[i];
+                const alpha = p.life / p.maxLife;
+                
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+                ctx.fillStyle = p.color + Math.floor(alpha * 255).toString(16).padStart(2, '0');
+                ctx.fill();
+                
+                if (STYLES[currentStyle].glow) {
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = p.color;
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                }
+            }
+        }
+        
+        // Create visual shader effects
+        function createVortexEffect() {
+            const vortexContainer = document.getElementById('vortex-container');
+            vortexContainer.style.opacity = "1";
+            vortexContainer.innerHTML = "";
+            
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+            
+            // Create spiral elements
+            for (let i = 0; i < 8; i++) {
+                const spiral = document.createElement('div');
+                spiral.style.position = 'absolute';
+                spiral.style.width = (100 + i * 50) + 'px';
+                spiral.style.height = (100 + i * 50) + 'px';
+                spiral.style.borderRadius = '50%';
+                spiral.style.border = `2px solid ${i % 2 ? '#e63946' : '#06d6a0'}`;
+                spiral.style.opacity = 0.5 - (i * 0.05);
+                spiral.style.top = `calc(50% - ${(100 + i * 50) / 2}px)`;
+                spiral.style.left = `calc(50% - ${(100 + i * 50) / 2}px)`;
+                spiral.style.animation = `spin ${5 + i}s linear infinite ${i % 2 ? 'reverse' : ''}`;
+                vortexContainer.appendChild(spiral);
+            }
+        }
+        
+        function createDistortionEffect() {
+            const distortionLayer = document.getElementById('distortion-layer');
+            distortionLayer.style.opacity = "0.3";
+            
+            // Create canvas for distortion
+            const canvas = document.createElement('canvas');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            distortionLayer.innerHTML = '';
+            distortionLayer.appendChild(canvas);
+            
+            const ctx = canvas.getContext('2d');
+            
+            // Create noise pattern
+            function drawNoise() {
+                const imageData = ctx.createImageData(canvas.width, canvas.height);
+                const data = imageData.data;
+                
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = Math.random() * 255;
+                    data[i] = r > 200 ? 255 : 0;     // R
+                    data[i+1] = r > 240 ? 255 : 0;   // G
+                    data[i+2] = 0;                   // B
+                    data[i+3] = r > 250 ? 100 : 0;   // A
+                }
+                
+                ctx.putImageData(imageData, 0, 0);
+                requestAnimationFrame(drawNoise);
+            }
+            
+            drawNoise();
+        }
+        
+        function clearEffects() {
+            const vortexContainer = document.getElementById('vortex-container');
+            const distortionLayer = document.getElementById('distortion-layer');
+            
+            vortexContainer.style.opacity = "0";
+            distortionLayer.style.opacity = "0";
+            
+            // Clean up magnetic points
+            for (const point of magneticPoints) {
+                if (point.element && document.body.contains(point.element)) {
+                    document.body.removeChild(point.element);
+                }
+            }
+            magneticPoints = [];
+        }
+        
+        // Animation loop with enhanced effects
+        function animationLoop(timestamp = 0) {
+            const deltaTime = timestamp - lastFrameTime;
+            lastFrameTime = timestamp;
+            animationTime = timestamp * 0.001; // seconds
+            particleTime += deltaTime;
+            
+            // Handle current mode
+            if (currentMode === "follow" && mousePosition.x > 0) {
+                handleFollowMode();
+            } else if (currentMode === "animation") {
+                handleAnimationMode(timestamp);
+            } else if (currentMode === "vortex") {
+                handleVortexMode(timestamp);
+            } else if (currentMode === "magnetism") {
+                handleMagnetismMode(timestamp);
+            }
+            
+            // Update any particles
+            updateParticles();
+            
+            // Draw the current state
+            draw();
+            
+            // Continue animation
+            animationFrameId = requestAnimationFrame(animationLoop);
+        }
+        
+        // Enhanced follow mode with dynamic effects
+        function handleFollowMode() {
+            if (mousePointIndex === -1) {
+                // Add a point for the mouse
+                points.push([mousePosition.x, mousePosition.y]);
+                mousePointIndex = points.length - 1;
+            } else {
+                // Update mouse point position
+                points[mousePointIndex][0] = mousePosition.x;
+                points[mousePointIndex][1] = mousePosition.y;
+            }
+            
+            // Add particles based on mouse speed
+            if (mouseSpeed > 10 && Math.random() > 0.7) {
+                createParticleExplosion(
+                    mousePosition.x + (Math.random() - 0.5) * 20, 
+                    mousePosition.y + (Math.random() - 0.5) * 20, 
+                    3
+                );
+            }
+            
+            // Add points occasionally with mouse movement
+            if (mouseSpeed > 15 && Math.random() > 0.95) {
+                points.push([
+                    mousePosition.x + (Math.random() - 0.5) * 50,
+                    mousePosition.y + (Math.random() - 0.5) * 50
+                ]);
+            }
+            
+            updateTriangulation();
+        }
+        
+        // Handle animation mode
+        function handleAnimationMode(timestamp) {
+            const time = timestamp * 0.001; // seconds
+            
+            // If not enough points, add some
+            if (points.length < 30) {
+                addInitialPoints();
+            }
+            
+            // Animate all points in interesting patterns
+            for (let i = 0; i < points.length; i++) {
+                const seed = i * 0.1;
+                const radiusX = 100 + 50 * Math.sin(seed + time * 0.2);
+                const radiusY = 100 + 50 * Math.cos(seed + time * 0.3);
+                const speed = 0.5 + i * 0.01;
+                
+                const centerX = window.innerWidth / 2;
+                const centerY = window.innerHeight / 2;
+                
+                const x = centerX + radiusX * Math.cos(seed + time * speed);
+                const y = centerY + radiusY * Math.sin(seed + time * speed * 1.5);
+                
+                points[i][0] = x;
+                points[i][1] = y;
+            }
+            
+            // Occasionally add a new animated point
+            if (Math.random() < 0.01) {
+                const angle = Math.random() * Math.PI * 2;
+                const centerX = window.innerWidth / 2;
+                const centerY = window.innerHeight / 2;
+                
+                points.push([
+                    centerX + Math.cos(angle) * 100,
+                    centerY + Math.sin(angle) * 100
+                ]);
+                
+                createParticleExplosion(
+                    centerX + Math.cos(angle) * 100,
+                    centerY + Math.sin(angle) * 100,
+                    5
+                );
+            }
+            
+            updateTriangulation();
+        }
+        
+        // Update the triangulation
+        function updateTriangulation() {
+            if (points.length < 3) {
+                delaunay = null;
+                return;
+            }
+            
+            // Convert points to flat array
+            const coords = new Float64Array(points.length * 2);
+            for (let i = 0; i < points.length; i++) {
+                coords[i * 2] = points[i][0];
+                coords[i * 2 + 1] = points[i][1];
+            }
+            
+            try {
+                delaunay = new Delaunator(coords);
+            } catch (e) {
+                console.error('Triangulation error:', e);
+                delaunay = null;
+            }
+        }
+        
+        // Draw current state
+        function draw() {
+            const style = STYLES[currentStyle];
+            
+            // Clear with background color
+            ctx.fillStyle = style.backgroundColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw triangulation if we have one
+            if (delaunay && points.length >= 3) {
+                const triangles = delaunay.get_triangles();
+                const coords = delaunay.get_coords();
+                
+                // Set up shadow glow if enabled
+                if (style.glow) {
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = style.triangleStroke;
+                }
+                
+                // Draw triangles
+                for (let i = 0; i < triangles.length; i += 3) {
+                    const a = triangles[i];
+                    const b = triangles[i + 1];
+                    const c = triangles[i + 2];
+                    
+                    // Calculate triangle center for gradient
+                    const centerX = (coords[2 * a] + coords[2 * b] + coords[2 * c]) / 3;
+                    const centerY = (coords[2 * a + 1] + coords[2 * b + 1] + coords[2 * c + 1]) / 3;
+                    
+                    // Create dynamic size based on animation
+                    let dynamicFillAlpha = style.triangleFill.substring(
+                        style.triangleFill.lastIndexOf(',') + 1,
+                        style.triangleFill.lastIndexOf(')')
+                    );
+                    
+                    if (style.pulse) {
+                        const dist = Math.sqrt(
+                            Math.pow(centerX - window.innerWidth/2, 2) + 
+                            Math.pow(centerY - window.innerHeight/2, 2)
+                        );
+                        
+                        const maxDist = Math.sqrt(
+                            Math.pow(window.innerWidth/2, 2) + 
+                            Math.pow(window.innerHeight/2, 2)
+                        );
+                        
+                        const normDist = dist / maxDist;
+                        dynamicFillAlpha = parseFloat(dynamicFillAlpha) * 
+                            (0.5 + 0.5 * Math.sin(animationTime * 2 + normDist * 10));
+                    }
+                    
+                    // Fill triangle
+                    ctx.beginPath();
+                    ctx.moveTo(coords[2 * a], coords[2 * a + 1]);
+                    ctx.lineTo(coords[2 * b], coords[2 * b + 1]);
+                    ctx.lineTo(coords[2 * c], coords[2 * c + 1]);
+                    ctx.closePath();
+                    
+                    // Get the base color without alpha
+                    const baseColor = style.triangleFill.substring(
+                        0, 
+                        style.triangleFill.lastIndexOf(',')
+                    );
+                    ctx.fillStyle = `${baseColor}, ${dynamicFillAlpha})`;
+                    ctx.fill();
+                    
+                    // Stroke triangle
+                    ctx.lineWidth = 0.5;
+                    ctx.strokeStyle = style.triangleStroke;
+                    ctx.stroke();
+                }
+                
+                // Draw hull
+                const hull = delaunay.get_hull();
+                if (hull.length > 0) {
+                    ctx.beginPath();
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = style.hullColor;
+                    
+                    const firstIdx = hull[0];
+                    ctx.moveTo(coords[2 * firstIdx], coords[2 * firstIdx + 1]);
+                    
+                    for (let i = 1; i < hull.length; i++) {
+                        const idx = hull[i];
+                        ctx.lineTo(coords[2 * idx], coords[2 * idx + 1]);
+                    }
+                    
+                    ctx.closePath();
+                    ctx.stroke();
+                }
+                
+                // Reset shadow
+                ctx.shadowBlur = 0;
+            }
+            
+            // Draw points
+            for (let i = 0; i < points.length; i++) {
+                const [x, y] = points[i];
+                let pointSize = style.pointSize;
+                
+                // Special styling for mouse point
+                if (i === mousePointIndex && currentMode === "follow") {
+                    ctx.beginPath();
+                    ctx.arc(x, y, pointSize * 3, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 255, 255, 0.1)`;
+                    ctx.fill();
+                    
+                    pointSize *= 1.5;
+                }
+                
+                // Apply pulse effect
+                if (style.pulse) {
+                    pointSize *= 0.8 + 0.4 * Math.sin(animationTime * 3 + i * 0.2);
+                }
+                
+                // Draw point
+                ctx.beginPath();
+                ctx.arc(x, y, pointSize, 0, Math.PI * 2);
+                ctx.fillStyle = style.pointColor;
+                
+                if (style.glow) {
+                    ctx.shadowBlur = 8;
+                    ctx.shadowColor = style.pointColor;
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                } else {
+                    ctx.fill();
+                }
+            }
+            
+            // Draw particles
+            drawParticles();
+            
+            // Draw glitch effects for glitch style
+            if (currentStyle === "glitch" && Math.random() > 0.95) {
+                const x = Math.random() * window.innerWidth;
+                const y = Math.random() * window.innerHeight;
+                const width = 100 + Math.random() * 200;
+                const height = 5 + Math.random() * 15;
+                
+                ctx.fillStyle = `rgba(230, 57, 70, ${Math.random() * 0.3})`;
+                ctx.fillRect(x, y, width, height);
+            }
+        }
+        
+        // New vortex mode with dynamic spiral effects
+        function handleVortexMode(timestamp) {
+            const time = timestamp * 0.001; // seconds
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+            
+            // If not enough points, add some
+            if (points.length < 40) {
+                // Clear points and add new ones in a spiral pattern
+                points.length = 0;
+                
+                // Add center point
+                points.push([centerX, centerY]);
+                
+                // Add points in spiral
+                const numPoints = 40;
+                const spirals = 3;
+                
+                for (let i = 0; i < numPoints; i++) {
+                    const angle = (i / numPoints) * Math.PI * 2 * spirals;
+                    const distance = (i / numPoints) * 300 * zoom;
+                    const x = centerX + Math.cos(angle) * distance;
+                    const y = centerY + Math.sin(angle) * distance;
+                    points.push([x, y]);
+                }
+            }
+            
+            // Rotate all points around center
+            for (let i = 1; i < points.length; i++) {
+                const dx = points[i][0] - centerX;
+                const dy = points[i][1] - centerY;
+                const distance = Math.sqrt(dx*dx + dy*dy);
+                
+                // Calculate angle and add rotation based on distance
+                const currentAngle = Math.atan2(dy, dx);
+                const rotationSpeed = 0.5 / (distance / 100);
+                const newAngle = currentAngle + rotationSpeed * 0.01;
+                
+                // Set new position
+                points[i][0] = centerX + Math.cos(newAngle) * distance;
+                points[i][1] = centerY + Math.sin(newAngle) * distance;
+            }
+            
+            // Mouse influence - distort points near mouse
+            if (mousePosition.x > 0) {
+                for (let i = 1; i < points.length; i++) {
+                    const dx = mousePosition.x - points[i][0];
+                    const dy = mousePosition.y - points[i][1];
+                    const distance = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (distance < 200) {
+                        const influence = 0.2 * (1 - distance / 200);
+                        points[i][0] += dx * influence;
+                        points[i][1] += dy * influence;
+                    }
+                }
+            }
+            
+            // Add occasional particle effects
+            if (Math.random() > 0.95) {
+                createParticleExplosion(
+                    centerX + (Math.random() - 0.5) * 200,
+                    centerY + (Math.random() - 0.5) * 200,
+                    10
+                );
+            }
+            
+            updateTriangulation();
+        }
+        
+        // New magnetism mode with interactive force fields
+        function handleMagnetismMode(timestamp) {
+            // Create magnetic points if we don't have any
+            if (magneticPoints.length === 0) {
+                createMagneticPoints(15);
+            }
+            
+            // Update points to match magnetic points
+            points.length = 0;
+            
+            for (const point of magneticPoints) {
+                points.push([point.x, point.y]);
+            }
+            
+            // Add mouse point if in view
+            if (mousePosition.x > 0) {
+                points.push([mousePosition.x, mousePosition.y]);
+            }
+            
+            updateTriangulation();
+        }
+        
+        // Set visual style with enhanced transitions
+        function setStyle(style) {
+            // Create particles for transition effect
+            for (let i = 0; i < 50; i++) {
+                createParticleExplosion(
+                    Math.random() * window.innerWidth,
+                    Math.random() * window.innerHeight,
+                    5
+                );
+            }
+            
+            currentStyle = style;
+            styleName.textContent = STYLES[style].name;
+            
+            // Update cursor color
+            cursor.style.backgroundColor = STYLES[style].pointColor;
+            
+            // Visual feedback
+            const container = document.querySelector('.container');
+            container.style.animation = 'none';
+            setTimeout(() => {
+                container.style.animation = '';
+            }, 10);
+            
+            // Update style selector
+            document.querySelectorAll('.style-option').forEach(opt => {
+                opt.classList.toggle('active', opt.dataset.style === style);
+            });
+            
+            draw();
+        }
+        
+        // Set interaction mode with enhanced transitions
+        function setMode(mode) {
+            // Clean up previous mode
+            clearEffects();
+            
+            if (currentMode === "follow") {
+                if (mousePointIndex !== -1) {
+                    points.splice(mousePointIndex, 1);
+                    mousePointIndex = -1;
+                    updateTriangulation();
+                }
+            }
+            
+            currentMode = mode;
+            
+            // Update mode button text
+            const modeButton = document.getElementById('mode');
+            if (mode === "normal") {
+                modeButton.innerHTML = "●";
+            } else if (mode === "follow") {
+                modeButton.innerHTML = "◆";
+            } else if (mode === "animation") {
+                modeButton.innerHTML = "◎";
+            } else if (mode === "vortex") {
+                modeButton.innerHTML = "⌘";
+                createVortexEffect();
+            } else if (mode === "magnetism") {
+                modeButton.innerHTML = "⊛";
+            }
+            
+            // Initialize new mode if needed
+            if (mode === "animation") {
+                // Clear existing points
+                points.length = 0;
+                mousePointIndex = -1;
+                
+                // Start animation
+                addInitialPoints();
+            } else if (mode === "vortex") {
+                // Clear existing points for vortex mode
+                points.length = 0;
+                mousePointIndex = -1;
+                zoom = 1;
+            } else if (mode === "distortion") {
+                modeButton.innerHTML = "◎";
+                createDistortionEffect();
+            }
+            
+            // Create particles for transition effect
+            for (let i = 0; i < 30; i++) {
+                createParticleExplosion(
+                    Math.random() * window.innerWidth,
+                    Math.random() * window.innerHeight,
+                    5
+                );
+            }
+        }
+        
+        // Extended event listeners with more interactive capabilities
+        document.addEventListener('DOMContentLoaded', () => {
+            // Canvas click - add point in normal mode or interact in other modes
+            canvas.addEventListener('click', (e) => {
+                if (currentMode === "normal") {
+                    points.push([e.clientX, e.clientY]);
+                    createParticleExplosion(e.clientX, e.clientY, 10);
+                    updateTriangulation();
+                } else if (currentMode === "vortex") {
+                    // Add distortion and particles in vortex mode
+                    createParticleExplosion(e.clientX, e.clientY, 20);
+                    
+                    // Create ripple
+                    createRippleEffect(e.clientX, e.clientY);
+                } else if (currentMode === "magnetism") {
+                    // Add a new magnetic point
+                    const point = {
+                        x: e.clientX,
+                        y: e.clientY,
+                        vx: 0,
+                        vy: 0,
+                        size: 6 + Math.random() * 4
+                    };
+                    
+                    // Create visual element
+                    const pointElement = document.createElement('div');
+                    pointElement.classList.add('magnetic-point');
+                    pointElement.style.left = point.x + 'px';
+                    pointElement.style.top = point.y + 'px';
+                    pointElement.style.width = point.size + 'px';
+                    pointElement.style.height = point.size + 'px';
+                    document.body.appendChild(pointElement);
+                    
+                    // Store reference to element
+                    point.element = pointElement;
+                    
+                    magneticPoints.push(point);
+                    createParticleExplosion(e.clientX, e.clientY, 10);
+                }
+            });
+            
+            // Double-click adds more significant effects
+            canvas.addEventListener('dblclick', (e) => {
+                // Major particle explosion
+                createParticleExplosion(e.clientX, e.clientY, 50);
+                
+                // Add multiple points in a circular pattern
+                if (currentMode === "normal") {
+                    const radius = 50;
+                    const numPoints = 8;
+                    
+                    for (let i = 0; i < numPoints; i++) {
+                        const angle = (i / numPoints) * Math.PI * 2;
+                        const x = e.clientX + Math.cos(angle) * radius;
+                        const y = e.clientY + Math.sin(angle) * radius;
+                        points.push([x, y]);
+                    }
+                    
+                    updateTriangulation();
+                }
+            });
+            
+            // Style selectors
+            document.querySelectorAll('.style-option').forEach(option => {
+                option.addEventListener('click', () => {
+                    setStyle(option.dataset.style);
+                });
+            });
+            
+            // Control buttons with enhanced interaction
+            document.getElementById('clear').addEventListener('click', () => {
+                clearPoints();
+                // Major explosion effect when clearing
+                for (let i = 0; i < 10; i++) {
+                    setTimeout(() => {
+                        createParticleExplosion(
+                            Math.random() * window.innerWidth,
+                            Math.random() * window.innerHeight,
+                            20
+                        );
+                    }, i * 100);
+                }
+            });
+            
+            document.getElementById('random').addEventListener('click', () => {
+                addRandomPoints(50);
+                // Ripple effect
+                createRippleEffect(window.innerWidth/2, window.innerHeight/2);
+            });
+            
+            document.getElementById('mode').addEventListener('click', () => {
+                // Cycle through expanded modes
+                if (currentMode === "normal") {
+                    setMode("follow");
+                } else if (currentMode === "follow") {
+                    setMode("animation");
+                } else if (currentMode === "animation") {
+                    setMode("vortex");
+                } else if (currentMode === "vortex") {
+                    setMode("magnetism");
+                } else {
+                    setMode("normal");
+                }
+            });
+            
+            // Key controls for advanced effects
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'd' || e.key === 'D') {
+                    // Toggle distortion effect
+                    const distortionLayer = document.getElementById('distortion-layer');
+                    if (distortionLayer.style.opacity === "0" || !distortionLayer.style.opacity) {
+                        createDistortionEffect();
+                    } else {
+                        distortionLayer.style.opacity = "0";
+                    }
+                }
+                
+                if (e.code === 'Space') {
+                    // Big explosion effect
+                    for (let i = 0; i < 5; i++) {
+                        setTimeout(() => {
+                            createParticleExplosion(
+                                Math.random() * window.innerWidth,
+                                Math.random() * window.innerHeight,
+                                30
+                            );
+                        }, i * 100);
+                    }
+                }
+            });
+        });
+        
+        // Initialize
+        setCanvasSize();
+        init();
+        setStyle("neon");
+        setMode("follow");
+    </script>
+</body>
+</html>
