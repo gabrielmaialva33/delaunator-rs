@@ -3,7 +3,7 @@
 //! This crate provides a fast, robust Delaunay triangulation algorithm for 2D points.
 //! It is designed to work with both native Rust and WebAssembly.
 
-mod utils;
+pub mod utils;
 
 // Required imports for WebAssembly bindings
 use wasm_bindgen::prelude::*;
@@ -935,5 +935,3 @@ fn swap(arr: &mut [u32], i: usize, j: usize) {
     arr[i] = arr[j];
     arr[j] = temp;
 }
-
-// Removendo a struct JsError que pode estar causando conflitos
