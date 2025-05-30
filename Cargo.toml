@@ -46,3 +46,6 @@ debug = true
 [profile.test]
 opt-level = 0
 debug = true
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
