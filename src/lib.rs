@@ -667,7 +667,7 @@ impl Delaunator {
 
         // Recursion eliminated with a fixed-size stack
         loop {
-            let b = self.halfedges[ar] as i32;
+            let b = self.halfedges[ar];
 
             // If the pair of triangles doesn't satisfy the Delaunay condition,
             // flip them, then do the same check/flip recursively for the new pair
@@ -695,14 +695,10 @@ impl Delaunator {
 
             // Check if the Delaunay condition is violated
             let illegal = in_circle(
-                self.coords[2 * p0],
-                self.coords[2 * p0 + 1],
-                self.coords[2 * pr],
-                self.coords[2 * pr + 1],
-                self.coords[2 * pl],
-                self.coords[2 * pl + 1],
-                self.coords[2 * p1],
-                self.coords[2 * p1 + 1],
+                (self.coords[2 * p0], self.coords[2 * p0 + 1]),
+                (self.coords[2 * pr], self.coords[2 * pr + 1]),
+                (self.coords[2 * pl], self.coords[2 * pl + 1]),
+                (self.coords[2 * p1], self.coords[2 * p1 + 1]),
             );
 
             if illegal {
@@ -710,7 +706,7 @@ impl Delaunator {
                 self.triangles[ar] = p1 as u32;
                 self.triangles[b as usize] = p0 as u32;
 
-                let hbl = self.halfedges[bl] as i32;
+                let hbl = self.halfedges[bl];
 
                 // Edge swapped on the other side of the hull (rare)
                 // Fix the halfedge reference
@@ -729,7 +725,7 @@ impl Delaunator {
                 }
 
                 self.link(ar, hbl);
-                self.link(b as usize, self.halfedges[ar] as i32);
+                self.link(b as usize, self.halfedges[ar]);
                 self.link(ar, bl as i32);
 
                 let br = b0 + (b as usize + 1) % 3;
@@ -790,13 +786,13 @@ fn dist(ax: f64, ay: f64, bx: f64, by: f64) -> f64 {
 /// Determine if a point p is inside the circumcircle of a, b, c
 /// This is a key predicate for the Delaunay condition
 #[inline]
-fn in_circle(ax: f64, ay: f64, bx: f64, by: f64, cx: f64, cy: f64, px: f64, py: f64) -> bool {
-    let dx = ax - px;
-    let dy = ay - py;
-    let ex = bx - px;
-    let ey = by - py;
-    let fx = cx - px;
-    let fy = cy - py;
+fn in_circle(a: (f64, f64), b: (f64, f64), c: (f64, f64), p: (f64, f64)) -> bool {
+    let dx = a.0 - p.0;
+    let dy = a.1 - p.1;
+    let ex = b.0 - p.0;
+    let ey = b.1 - p.1;
+    let fx = c.0 - p.0;
+    let fy = c.1 - p.1;
 
     let ap = dx * dx + dy * dy;
     let bp = ex * ex + ey * ey;
@@ -931,7 +927,5 @@ fn quicksort(ids: &mut [u32], dists: &mut [f64], left: usize, right: usize) {
 
 // Helper function to swap elements in an array
 fn swap(arr: &mut [u32], i: usize, j: usize) {
-    let temp = arr[i];
-    arr[i] = arr[j];
-    arr[j] = temp;
+    arr.swap(i, j);
 }
